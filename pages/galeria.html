@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Galeria Pessoal - PhotoVerse</title>
+    <link rel="stylesheet" href="../styles/estilos.css" />
+    <style>
+      /* pequenas regras locais para a demo */
+      .hidden{display:none}
+      #gallery{display:flex;flex-wrap:wrap;gap:10px}
+      .photo{width:200px; border:1px solid #ddd; padding:6px}
+      .photo img{width:100%; height:140px; object-fit:cover}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Galeria Pessoal</h1>
+
+      <section id="auth-section">
+        <div id="not-signed">
+          <h3>Entrar / Registrar</h3>
+          <input id="email" type="email" placeholder="Email" />
+          <input id="password" type="password" placeholder="Senha" />
+          <button id="btn-login">Entrar</button>
+          <button id="btn-register">Registrar</button>
+          <button id="btn-google">Entrar com Google</button>
+        </div>
+
+        <div id="signed" class="hidden">
+          <p>Conectado como <span id="user-email"></span></p>
+          <button id="btn-logout">Sair</button>
+        </div>
+      </section>
+
+      <section id="upload-section" class="hidden">
+        <h3>Enviar Fotos</h3>
+        <input id="file-input" type="file" accept="image/*" multiple />
+        <button id="btn-upload">Enviar</button>
+        <div id="upload-status"></div>
+      </section>
+
+      <section>
+        <h3>Suas Fotos</h3>
+        <div id="gallery"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        signOut,
+        GoogleAuthProvider,
+        signInWithPopup
+      } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        query,
+        where,
+        orderBy,
+        onSnapshot,
+        serverTimestamp
+      } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
+      import {
+        getStorage,
+        ref,
+        uploadBytes,
+        getDownloadURL
+      } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
+      import { firebaseConfig } from './firebase-config.js';
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      const storage = getStorage(app);
+
+      // elementos
+      const emailEl = document.getElementById('email');
+      const passwordEl = document.getElementById('password');
+      const btnLogin = document.getElementById('btn-login');
+      const btnRegister = document.getElementById('btn-register');
+      const btnGoogle = document.getElementById('btn-google');
+      const btnLogout = document.getElementById('btn-logout');
+      const notSigned = document.getElementById('not-signed');
+      const signed = document.getElementById('signed');
+      const userEmailSpan = document.getElementById('user-email');
+
+      const uploadSection = document.getElementById('upload-section');
+      const fileInput = document.getElementById('file-input');
+      const btnUpload = document.getElementById('btn-upload');
+      const uploadStatus = document.getElementById('upload-status');
+      const gallery = document.getElementById('gallery');
+
+      btnLogin.addEventListener('click', async () => {
+        try {
+          await signInWithEmailAndPassword(auth, emailEl.value, passwordEl.value);
+        } catch (err) {
+          alert('Erro ao entrar: ' + err.message);
+        }
+      });
+
+      btnRegister.addEventListener('click', async () => {
+        try {
+          await createUserWithEmailAndPassword(auth, emailEl.value, passwordEl.value);
+        } catch (err) {
+          alert('Erro ao registrar: ' + err.message);
+        }
+      });
+
+      btnGoogle.addEventListener('click', async () => {
+        try {
+          const provider = new GoogleAuthProvider();
+          await signInWithPopup(auth, provider);
+        } catch (err) {
+          alert('Erro ao entrar com Google: ' + err.message);
+        }
+      });
+
+      btnLogout.addEventListener('click', () => signOut(auth));
+
+      let unsubscribeGallery = null;
+
+      onAuthStateChanged(auth, user => {
+        if (user) {
+          notSigned.classList.add('hidden');
+          signed.classList.remove('hidden');
+          uploadSection.classList.remove('hidden');
+          userEmailSpan.textContent = user.email || user.uid;
+          startGalleryListener(user.uid);
+        } else {
+          notSigned.classList.remove('hidden');
+          signed.classList.add('hidden');
+          uploadSection.classList.add('hidden');
+          userEmailSpan.textContent = '';
+          gallery.innerHTML = '';
+          if (unsubscribeGallery) { unsubscribeGallery(); unsubscribeGallery = null; }
+        }
+      });
+
+      function startGalleryListener(uid) {
+        if (unsubscribeGallery) unsubscribeGallery();
+        const photosCol = collection(db, 'photos');
+        const q = query(photosCol, where('uid', '==', uid), orderBy('createdAt', 'desc'));
+        unsubscribeGallery = onSnapshot(q, snapshot => {
+          gallery.innerHTML = '';
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const el = document.createElement('div');
+            el.className = 'photo';
+            el.innerHTML = `
+              <img src="${data.url}" alt="${data.name}" />
+              <div>${data.name}</div>
+            `;
+            gallery.appendChild(el);
+          });
+        }, err => {
+          console.error('Erro ao carregar galeria', err);
+        });
+      }
+
+      btnUpload.addEventListener('click', async () => {
+        const user = auth.currentUser;
+        if (!user) { alert('Faça login antes de enviar.'); return; }
+        const files = fileInput.files;
+        if (!files.length) { alert('Selecione ao menos uma imagem.'); return; }
+
+        uploadStatus.textContent = 'Enviando...';
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const path = `users/${user.uid}/${Date.now()}_${file.name}`;
+          const storageRef = ref(storage, path);
+          try {
+            await uploadBytes(storageRef, file);
+            const url = await getDownloadURL(storageRef);
+            await addDoc(collection(db, 'photos'), {
+              uid: user.uid,
+              url,
+              name: file.name,
+              createdAt: serverTimestamp()
+            });
+          } catch (err) {
+            console.error('Erro no upload', err);
+            alert('Erro ao enviar ' + file.name + ': ' + err.message);
+          }
+        }
+        uploadStatus.textContent = 'Upload concluído.';
+        fileInput.value = '';
+      });
+
+    </script>
+  </body>
+</html>

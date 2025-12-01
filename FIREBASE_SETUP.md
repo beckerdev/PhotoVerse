@@ -3,7 +3,7 @@
 Passos rápidos:
 
 - Criar um projeto no Firebase Console: https://console.firebase.google.com/
-- Habilitar Authentication (Email/Password e/ou Google Sign-In).
+- Habilitar Authentication (Email/Password e/ou Google Sign-In) ou habilitar **Anonymous Authentication** se quiser que os usuários façam upload sem uma UI de login.
 - Habilitar Firestore (modo produção) e Firebase Storage.
 
 Arquivo de config:
@@ -38,10 +38,12 @@ service firebase.storage {
 
 Observações:
 - A página `pages/galeria.html` grava metadados em `collection('photos')` e salva o arquivo em `users/{uid}/...` no Storage. As regras acima garantem que cada usuário só leia/escreva seus próprios arquivos/metadados.
+- A implementação atual usa **autenticação anônima** (sem pedir email/senha) — habilite `Anonymous Authentication` no Console do Firebase em `Authentication -> Sign-in method`.
 - Não comite `firebase-config.js` com chaves reais em repositórios públicos. Use variáveis de ambiente ou serviços secretos em produção.
 
 Testando localmente:
 
 1. No Firebase Console, copie as configurações do SDK e cole em `pages/firebase-config.js` (substitua os placeholders).
-2. Abra `pages/galeria.html` no navegador (ex: arraste para o navegador ou sirva via servidor estático: `python -m http.server` na raiz do projeto).
-3. Registre/entre com um usuário e envie imagens. A galeria mostrará somente as imagens do usuário autenticado.
+2. Habilite `Anonymous Authentication` em `Authentication -> Sign-in method`.
+3. Abra `pages/galeria.html` no navegador (ex: arraste para o navegador ou sirva via servidor estático: `python -m http.server` na raiz do projeto).
+4. Envie imagens — a galeria mostrará apenas as imagens associadas ao UID anônimo daquele navegador/dispositivo.

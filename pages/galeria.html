@@ -17,20 +17,9 @@
     <main>
       <h1>Galeria Pessoal</h1>
 
-      <section id="auth-section">
-        <div id="not-signed">
-          <h3>Entrar / Registrar</h3>
-          <input id="email" type="email" placeholder="Email" />
-          <input id="password" type="password" placeholder="Senha" />
-          <button id="btn-login">Entrar</button>
-          <button id="btn-register">Registrar</button>
-          <button id="btn-google">Entrar com Google</button>
-        </div>
-
-        <div id="signed" class="hidden">
-          <p>Conectado como <span id="user-email"></span></p>
-          <button id="btn-logout">Sair</button>
-        </div>
+      <!-- Autenticação automática (anônima) — sem UI para o usuário -->
+      <section id="auth-section" class="hidden">
+        <p id="user-info">Conectando...</p>
       </section>
 
       <section id="upload-section" class="hidden">
@@ -51,11 +40,7 @@
       import {
         getAuth,
         onAuthStateChanged,
-        signInWithEmailAndPassword,
-        createUserWithEmailAndPassword,
-        signOut,
-        GoogleAuthProvider,
-        signInWithPopup
+        signInAnonymously
       } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
       import {
         getFirestore,
@@ -81,67 +66,44 @@
       const storage = getStorage(app);
 
       // elementos
-      const emailEl = document.getElementById('email');
-      const passwordEl = document.getElementById('password');
-      const btnLogin = document.getElementById('btn-login');
-      const btnRegister = document.getElementById('btn-register');
-      const btnGoogle = document.getElementById('btn-google');
-      const btnLogout = document.getElementById('btn-logout');
-      const notSigned = document.getElementById('not-signed');
-      const signed = document.getElementById('signed');
-      const userEmailSpan = document.getElementById('user-email');
-
+      const authSection = document.getElementById('auth-section');
+      const userInfo = document.getElementById('user-info');
       const uploadSection = document.getElementById('upload-section');
       const fileInput = document.getElementById('file-input');
       const btnUpload = document.getElementById('btn-upload');
       const uploadStatus = document.getElementById('upload-status');
       const gallery = document.getElementById('gallery');
 
-      btnLogin.addEventListener('click', async () => {
-        try {
-          await signInWithEmailAndPassword(auth, emailEl.value, passwordEl.value);
-        } catch (err) {
-          alert('Erro ao entrar: ' + err.message);
-        }
-      });
-
-      btnRegister.addEventListener('click', async () => {
-        try {
-          await createUserWithEmailAndPassword(auth, emailEl.value, passwordEl.value);
-        } catch (err) {
-          alert('Erro ao registrar: ' + err.message);
-        }
-      });
-
-      btnGoogle.addEventListener('click', async () => {
-        try {
-          const provider = new GoogleAuthProvider();
-          await signInWithPopup(auth, provider);
-        } catch (err) {
-          alert('Erro ao entrar com Google: ' + err.message);
-        }
-      });
-
-      btnLogout.addEventListener('click', () => signOut(auth));
-
       let unsubscribeGallery = null;
+
+      // Efetua login anônimo automaticamente para obter uid (sem UI)
+      async function ensureAnonymousAuth() {
+        try {
+          if (!auth.currentUser) {
+            await signInAnonymously(auth);
+          }
+        } catch (err) {
+          console.error('Erro ao autenticar anonimamente', err);
+          userInfo.textContent = 'Erro ao conectar: ' + err.message;
+          authSection.classList.remove('hidden');
+          uploadSection.classList.add('hidden');
+        }
+      }
 
       onAuthStateChanged(auth, user => {
         if (user) {
-          notSigned.classList.add('hidden');
-          signed.classList.remove('hidden');
+          authSection.classList.add('hidden');
           uploadSection.classList.remove('hidden');
-          userEmailSpan.textContent = user.email || user.uid;
           startGalleryListener(user.uid);
         } else {
-          notSigned.classList.remove('hidden');
-          signed.classList.add('hidden');
+          authSection.classList.remove('hidden');
           uploadSection.classList.add('hidden');
-          userEmailSpan.textContent = '';
-          gallery.innerHTML = '';
           if (unsubscribeGallery) { unsubscribeGallery(); unsubscribeGallery = null; }
         }
       });
+
+      // inicia auth anônimo na carga da página
+      ensureAnonymousAuth();
 
       function startGalleryListener(uid) {
         if (unsubscribeGallery) unsubscribeGallery();
@@ -166,7 +128,7 @@
 
       btnUpload.addEventListener('click', async () => {
         const user = auth.currentUser;
-        if (!user) { alert('Faça login antes de enviar.'); return; }
+        if (!user) { alert('Aguarde, conectando...'); return; }
         const files = fileInput.files;
         if (!files.length) { alert('Selecione ao menos uma imagem.'); return; }
 

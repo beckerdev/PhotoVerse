@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhotoVerse - Sua Galeria Pessoal</title>
+    
+    <!-- Link para a fonte Poppins do Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/estilos.css">
+</head>
+<body>
+
+    <!-- 1. SEÇÃO HERO -->
+    <header class="hero">
+        <div class="hero-content">
+            <h1 class="animate-on-load">Onde seus momentos se tornam arte.</h1>
+            <p class="animate-on-load">Capture, compartilhe e explore um universo de fotografias.</p>
+            <div class="hero-buttons animate-on-load">
+                <a href="#gallery" class="btn btn-primary">Explorar Galeria</a>
+                <a href="#upload" class="btn btn-secondary">Carregar Foto</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- 2. SEÇÃO GALERIA DE FOTOS -->
+        <section id="gallery" class="gallery-section">
+            <h2 class="section-title">Em Destaque</h2>
+            <div class="photo-grid">
+                <!-- Imagens de exemplo do Unsplash. Elas seriam carregadas dinamicamente pelo backend. -->
+                <div class="photo-item"><img src="image/paisagem-natural-um-dos-tipos-de-paisagem.webp" alt="Foto de paisagem"></div>
+                <div class="photo-item tall"><img src="image/2020-08-14-10-17-20-800x1200.jpg" alt="Retrato de uma pessoa"></div>
+                <div class="photo-item wide"><img src="image/2017-12-08-09-16-21-1200x800.jpg" alt="Foto de arquitetura"></div>
+                <div class="photo-item"><img src="image/images.jpg" alt="Foto da natureza"></div>
+                <div class="photo-item wide"><img src="image/transferir.jpg" alt="Foto de cidade"></div>
+                <div class="photo-item"><img src="image/2019-01-09-12-20-35-960x640.jpeg" alt="Foto de animal"></div>
+                <div class="photo-item tall"><img src="image/smartphone-pedestrian-person-people-boardwalk-girl-woman-white-street-urban-photo-busy-female-young-tourism-lifestyle-blonde-life-dress-pedestrians-picture-day-taking-726448.jpg" alt="Foto de pessoas"></div>
+                <div class="photo-item"><img src="image/food_cooking_food_closeup_dish_tasty_cooking_nutrition_cook-1279370.jpg!d" alt="Foto de comida"></div>
+            </div>
+        </section>
+
+        <!-- 3. SEÇÃO DE UPLOAD -->
+        <section id="upload" class="upload-section">
+            <h2 class="section-title">Compartilhe sua visão</h2>
+            <div class="upload-box">
+                <input type="file" id="file-input" multiple hidden>
+                <label for="file-input" class="upload-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 43"><path d="M48.4 26.5c-2.2-2.1-5.6-2.2-7.9-0.1L32 34.6V3.5C32 1.6 30.4 0 28.5 0H21.5C19.6 0 18 1.6 18 3.5v31.1L9.5 26.4c-2.2-2.1-5.8-2-7.9 0.1s-2.1 5.8 0.1 7.9l19.1 18.2c2.2 2.1 5.8 2.1 7.9 0l19.1-18.2C50.5 32.3 50.6 28.6 48.4 26.5z"/></svg>
+                    <strong>Escolha um arquivo</strong>
+                    <span class="upload-drag-text">ou arraste-o aqui</span>
+                </label>
+            </div>
+        </section>
+    </main>
+
+    <!-- 4. RODAPÉ -->
+    <footer>
+        <p>&copy; 2025 PhotoVerse. Todos os direitos reservados.</p>
+    </footer>
+    
+    <!-- Link para a biblioteca ScrollReveal para animações de rolagem --><!--separada/ não desconectar-->
+    <script src="https://unpkg.com/scrollreveal"></script>
+
+    <!-- JavaScript Incorporado -->
+    <script>
+        // Animações de Scroll com a biblioteca ScrollReveal
+        const sr = ScrollReveal({
+            distance: '60px',
+            duration: 2000,
+            easing: 'cubic-bezier(0.5, 0, 0, 1)',
+            reset: false // A animação ocorre apenas uma vez
+        });
+
+        // animações para cada seção
+        sr.reveal('.section-title', { origin: 'top' });
+        sr.reveal('.photo-item', { origin: 'bottom', interval: 150 });
+        sr.reveal('.upload-box', { origin: 'bottom', duration: 2500 });
+
+        // Funcionalidade de Drag-and-Drop para o Upload
+        const uploadBox = document.querySelector('.upload-box');
+        const fileInput = document.querySelector('#file-input');
+
+        // multiplus comportamentos possiveis do navegador
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadBox.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Adiciona a classe visual quando o arquivo está sobre a área
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadBox.addEventListener(eventName, () => uploadBox.classList.add('is-dragover'), false);
+        });
+
+        // Remove a classe visual
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadBox.addEventListener(eventName, () => uploadBox.classList.remove('is-dragover'), false);
+        });
+
+        // Captura os arquivos quando são "soltos"
+        uploadBox.addEventListener('drop', (e) => {
+            fileInput.files = e.dataTransfer.files;
+            
+            // Log para simular o início do upload
+            console.log(`Arquivos selecionados para upload:`, fileInput.files);
+            alert(`${fileInput.files.length} arquivo(s) selecionado(s)! Em uma aplicação real, o upload começaria agora.`);
+            // AQUI VOCÊ CHAMARIA A FUNÇÃO DE UPLOAD PARA A API BACKEND
+        });
+
+    </script>
+</body>
+</html>

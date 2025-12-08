@@ -35,126 +35,121 @@
       </section>
     </main>
 
-    <script type="module">
-      import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
-      import {
-        getAuth,
-        onAuthStateChanged,
-        signInAnonymously
-      } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
-      import {
-        getFirestore,
-        collection,
-        addDoc,
-        query,
-        where,
-        orderBy,
-        onSnapshot,
-        serverTimestamp
-      } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
-      import {
-        getStorage,
-        ref,
-        uploadBytes,
-        getDownloadURL
-      } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
-      import { firebaseConfig } from './firebase-config.js';
+    <script>
+      // Armazenamento local via IndexedDB — as imagens ficam apenas no navegador do usuário
+      (function () {
+        const dbName = 'photoverse-local';
+        const storeName = 'photos';
 
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-      const storage = getStorage(app);
+        const gallery = document.getElementById('gallery');
+        const fileInput = document.getElementById('file-input');
+        const btnUpload = document.getElementById('btn-upload');
+        const uploadStatus = document.getElementById('upload-status');
 
-      // elementos
-      const authSection = document.getElementById('auth-section');
-      const userInfo = document.getElementById('user-info');
-      const uploadSection = document.getElementById('upload-section');
-      const fileInput = document.getElementById('file-input');
-      const btnUpload = document.getElementById('btn-upload');
-      const uploadStatus = document.getElementById('upload-status');
-      const gallery = document.getElementById('gallery');
-
-      let unsubscribeGallery = null;
-
-      // Efetua login anônimo automaticamente para obter uid (sem UI)
-      async function ensureAnonymousAuth() {
-        try {
-          if (!auth.currentUser) {
-            await signInAnonymously(auth);
-          }
-        } catch (err) {
-          console.error('Erro ao autenticar anonimamente', err);
-          userInfo.textContent = 'Erro ao conectar: ' + err.message;
-          authSection.classList.remove('hidden');
-          uploadSection.classList.add('hidden');
-        }
-      }
-
-      onAuthStateChanged(auth, user => {
-        if (user) {
-          authSection.classList.add('hidden');
-          uploadSection.classList.remove('hidden');
-          startGalleryListener(user.uid);
-        } else {
-          authSection.classList.remove('hidden');
-          uploadSection.classList.add('hidden');
-          if (unsubscribeGallery) { unsubscribeGallery(); unsubscribeGallery = null; }
-        }
-      });
-
-      // inicia auth anônimo na carga da página
-      ensureAnonymousAuth();
-
-      function startGalleryListener(uid) {
-        if (unsubscribeGallery) unsubscribeGallery();
-        const photosCol = collection(db, 'photos');
-        const q = query(photosCol, where('uid', '==', uid), orderBy('createdAt', 'desc'));
-        unsubscribeGallery = onSnapshot(q, snapshot => {
-          gallery.innerHTML = '';
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const el = document.createElement('div');
-            el.className = 'photo';
-            el.innerHTML = `
-              <img src="${data.url}" alt="${data.name}" />
-              <div>${data.name}</div>
-            `;
-            gallery.appendChild(el);
+        function openDB() {
+          return new Promise((resolve, reject) => {
+            const req = indexedDB.open(dbName, 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName, { keyPath: 'id', autoIncrement: true });
+              }
+            };
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e.target.error);
           });
-        }, err => {
-          console.error('Erro ao carregar galeria', err);
-        });
-      }
+        }
 
-      btnUpload.addEventListener('click', async () => {
-        const user = auth.currentUser;
-        if (!user) { alert('Aguarde, conectando...'); return; }
-        const files = fileInput.files;
-        if (!files.length) { alert('Selecione ao menos uma imagem.'); return; }
+        async function addPhoto(name, blob) {
+          const db = await openDB();
+          return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const item = { name, blob, createdAt: Date.now() };
+            const req = store.add(item);
+            req.onsuccess = () => {
+              tx.oncomplete = () => { db.close(); resolve(); };
+            };
+            req.onerror = (e) => reject(e.target.error);
+          });
+        }
 
-        uploadStatus.textContent = 'Enviando...';
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const path = `users/${user.uid}/${Date.now()}_${file.name}`;
-          const storageRef = ref(storage, path);
+        async function getAllPhotos() {
+          const db = await openDB();
+          return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const req = store.getAll();
+            req.onsuccess = () => { resolve(req.result); db.close(); };
+            req.onerror = (e) => reject(e.target.error);
+          });
+        }
+
+        async function deletePhoto(id) {
+          const db = await openDB();
+          return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const req = store.delete(id);
+            req.onsuccess = () => { tx.oncomplete = () => { db.close(); resolve(); }; };
+            req.onerror = (e) => reject(e.target.error);
+          });
+        }
+
+        async function refreshGallery() {
+          gallery.innerHTML = '';
           try {
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            await addDoc(collection(db, 'photos'), {
-              uid: user.uid,
-              url,
-              name: file.name,
-              createdAt: serverTimestamp()
+            const photos = await getAllPhotos();
+            photos.sort((a, b) => b.createdAt - a.createdAt);
+            photos.forEach(p => {
+              const el = document.createElement('div');
+              el.className = 'photo';
+              const img = document.createElement('img');
+              const url = URL.createObjectURL(p.blob);
+              img.src = url;
+              img.alt = p.name;
+              const info = document.createElement('div');
+              info.textContent = p.name;
+              const del = document.createElement('button');
+              del.textContent = 'Excluir';
+              del.addEventListener('click', async () => {
+                if (confirm('Excluir esta foto?')) {
+                  await deletePhoto(p.id);
+                  refreshGallery();
+                }
+              });
+              el.appendChild(img);
+              el.appendChild(info);
+              el.appendChild(del);
+              gallery.appendChild(el);
             });
           } catch (err) {
-            console.error('Erro no upload', err);
-            alert('Erro ao enviar ' + file.name + ': ' + err.message);
+            console.error('Erro ao ler fotos locais', err);
           }
         }
-        uploadStatus.textContent = 'Upload concluído.';
-        fileInput.value = '';
-      });
 
+        btnUpload.addEventListener('click', async () => {
+          const files = fileInput.files;
+          if (!files || !files.length) { alert('Selecione ao menos uma imagem.'); return; }
+          uploadStatus.textContent = 'Salvando localmente...';
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            // o File é um Blob e pode ser armazenado diretamente no IndexedDB
+            try {
+              await addPhoto(file.name, file);
+            } catch (err) {
+              console.error('Erro ao salvar localmente', err);
+              alert('Erro ao salvar ' + file.name + ': ' + err.message);
+            }
+          }
+          uploadStatus.textContent = 'Concluído.';
+          fileInput.value = '';
+          await refreshGallery();
+        });
+
+        // inicializa a galeria local
+        window.addEventListener('load', () => { refreshGallery(); });
+      })();
     </script>
   </body>
 </html>
